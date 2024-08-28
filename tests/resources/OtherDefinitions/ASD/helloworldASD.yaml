@@ -1,0 +1,11 @@
+asdId: 1
+asdSchemaVersion: 1.0.0
+asdProvider: Ericsson
+asdApplicationName: App-Onboarding-Hello-World
+asdApplicationVersion: 1.0.0
+asdApplicationInfoName: Hello World Application
+asdInfoDescription: Hello World application for App Onboarding
+deploymentItems:
+    deploymentId: 1
+    deploymentItemId: 1
+    artifactId: OtherDefinitions/ASD/eric-un-notification-service-0.0.1-102.tgz

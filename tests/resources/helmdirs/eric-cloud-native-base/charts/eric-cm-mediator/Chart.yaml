@@ -1,0 +1,10 @@
+apiVersion: v1
+appVersion: 7.6.0
+description: A Helm chart for the ADP Configuration Management (CM) Mediator Service
+maintainers:
+- email: PDLCAMSDEV@pdl.internal.ericsson.com
+  name: Atlantis
+name: eric-cm-mediator
+sources:
+- https://gerrit.ericsson.se/plugins/gitiles/adp-gs/adp-gs-cm/
+version: 7.6.0+11

@@ -1,0 +1,17 @@
+global:
+  registry:
+    url: armdocker.rnd.ericsson.se
+    pullSecret: armdocker
+
+# Configuration for ADP subcharts
+#
+eric-mesh-sidecar-injector:
+  enabled: true
+
+  istio_cni:
+    enabled: false
+
+  imageCredentials:
+    pullPolicy: IfNotPresent
+    registry:
+      url:

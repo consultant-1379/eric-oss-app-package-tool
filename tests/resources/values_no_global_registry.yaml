@@ -1,0 +1,26 @@
+global:
+
+# Configuration for ADP subcharts
+#
+eric-mesh-sidecar-injector:
+  enabled: true
+
+  istio_cni:
+    enabled: false
+
+  imageCredentials:
+    repoPath: proj-adp-gs-service-mesh
+    pullPolicy: IfNotPresent
+    registry:
+      url:
+
+  images:
+    sidecar_injector:
+      name: eric-mesh-sidecar-injector
+      tag: 1.1.0-130
+    proxy:
+      name: eric-mesh-proxy
+      tag: 1.1.0-130
+    proxy_init:
+      name: eric-mesh-proxy-init
+      tag: 1.1.0-130

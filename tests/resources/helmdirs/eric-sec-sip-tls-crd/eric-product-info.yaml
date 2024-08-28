@@ -1,0 +1,11 @@
+productName: "Service Identity Provider TLS CRD"
+productNumber: "CXC 174 2970"
+images:
+  crdjob:
+    productName: "SIP-TLS CRD Job Image"
+    productNumber: "CXC 174 2971/2"
+    registry: "armdocker.rnd.ericsson.se"
+    repoPath: "proj-common-assets-cd/security"
+    name: "eric-sec-sip-tls-crd-job"
+    # Note: template value that will replaced in helm-package script from release automation builder to replace at build time
+    tag: "2.8.0-35"

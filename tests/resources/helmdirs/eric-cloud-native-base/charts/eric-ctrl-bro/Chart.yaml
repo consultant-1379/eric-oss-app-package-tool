@@ -1,0 +1,7 @@
+apiVersion: v2
+description: ADP Backup and Restore Orchestrator
+maintainers:
+- email: PDLADPGSBA@pdl.internal.ericsson.com
+  name: ADP Backup and Restore Orchestrator
+name: eric-ctrl-bro
+version: 4.7.0+23

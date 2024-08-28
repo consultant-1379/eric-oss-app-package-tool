@@ -1,0 +1,5 @@
+TOSCA-Meta-File-Version: 1.0
+CSAR-Version: 1.99.99
+Created-By: Ericsson
+Entry-Definitions: ../tests/resources/definitions/AppDescriptor.yaml
+Entry-OtherDefinitions: ../tests/resources/OtherDefinitions/ASD/helloworldASD.yaml

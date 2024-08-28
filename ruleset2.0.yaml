@@ -1,0 +1,286 @@
+#
+# COPYRIGHT Ericsson 2021
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+modelVersion: 2.0
+
+properties:
+  - docker-url: ${env.DOCKER_REGISTRY}/${env.DOCKER_REPO}
+
+# See image catalog: https://confluence.lmera.ericsson.se/display/ACD/ADP+CICD+Docker+Image+Catalog
+docker-images:
+  - javamvn: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-javamvnbuilder:latest
+  - jre-py: armdocker.rnd.ericsson.se/proj-eric-oss-dev-test/jre-mvn-py:2.2.0
+  - local-image: armdocker.rnd.ericsson.se/proj-eric-oss-dev-test/${var.repo}/${var.project}:${var.image-version}
+
+# Import environment variables (For example: Jenkins parameters)
+env:
+  - BRANCH (default=dirty)
+  - DOCKER_NETWORK (default=--network host)
+  - DOCKER_CONFIG (default=${env.HOME}/.docker/config.json)
+  - DOCKER_VOLUME_MAPPING_PASSWD (default=--volume ${env.HOME}/mypasswd:/etc/passwd:ro)
+  - GERRIT_REFSPEC
+  - HOME
+  - MAVEN_CLI_OPTS (default=-Duser.home=${env.HOME} -B )
+  - MAVEN_OPTS (default=-Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn)
+  - PWD
+  - DOCKER_REGISTRY (default=armdocker.rnd.ericsson.se)
+  - DOCKER_REPO (default=proj-eric-oss-dev-test)
+  - RELEASE (default=false)
+  - BUILD_NUMBER
+  - BASE_IMAGE
+
+  # Credentials
+  - SELI_ARTIFACTORY_REPO_USER
+  - SELI_ARTIFACTORY_REPO_PASS
+
+  # Default docker image tags
+  - MVN_BUILDER_TAG (default=latest)
+  - SDKSCHEMA_VALIDATOR_TAG (default=latest)
+
+# Variables, set by below tasks
+var:
+  - commithash
+  - commithash-full
+  - commit-author
+  - commit-email
+  - repo
+  - project: .project_name
+  - version: .project_version
+  - image-version
+  - image-name
+  - docker-config-basepath
+
+# Rules to execute
+rules:
+
+  # Integrated rule to execute everything locally (init-dev)
+  release:
+    - rule: clean
+    - rule: build
+    - rule: generate-project
+    - rule: package-jars
+
+  # Clean workspace
+  clean:
+    - task: rm
+      cmd:
+        - rm -rf .bob/
+        - rm -rf build/
+        - rm -rf new-project/
+        - rm -f artifact.properties
+        - git clean -xdff --exclude=.m2 --exclude=.sonar --exclude=settings.xml --exclude=.docker --exclude=.kube
+    - task: mvn-clean
+      docker-image: jre-py
+      docker-flags: &mvn-docker-flags
+        - "--env MAVEN_OPTS=${env.MAVEN_OPTS}"
+        - "--env HOME=${env.HOME}"
+        - "--volume /var/run/docker.sock:/var/run/docker.sock"
+        - "--volume ${env.HOME}:${env.HOME}"
+        - "--volume /proj/mvn/:/proj/mvn"
+      cmd: mvn ${env.MAVEN_CLI_OPTS}  clean install -DskipTests
+
+  test:
+    - task: mvn-test
+      docker-image: jre-py
+      docker-flags: *mvn-docker-flags
+      cmd: mvn ${env.MAVEN_CLI_OPTS} test
+
+  robot:
+    - task: mvn-acceptance-test
+      docker-image: jre-py
+      docker-flags: &mvn-docker-flags-home
+        - "--env MAVEN_OPTS=${env.MAVEN_OPTS}"
+        - "--env HOME=${env.HOME}"
+        - "--volume /var/run/docker.sock:/var/run/docker.sock"
+        - "--volume ${env.HOME}:${env.HOME}"
+        - "--volume /proj/mvn/:/proj/mvn"
+        - "--workdir ${env.PWD}"
+      cmd: mvn  ${env.MAVEN_CLI_OPTS} clean install -DskipTests --debug -Pacceptance
+
+  bob_project_name:
+    - task: write the project name to file
+      docker-image: javamvn
+      docker-flags: *mvn-docker-flags
+      cmd:
+        mvn ${env.MAVEN_CLI_OPTS} org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=project.artifactId -DforceStdout | grep -Ev "(^\[|Download.*$)" > name_output.txt
+    - task: write-to-variable
+      cmd:
+        - cat name_output.txt;
+          new_project_name=$(cat name_output.txt);
+          rm name_output.txt;
+          echo "Writing Project name \"$new_project_name\" into .project_name";
+          echo -n "$new_project_name" > .project_name;
+
+  bob_gerrit_version:
+    - task: write gerrit version to file
+      docker-image: javamvn
+      docker-flags: *mvn-docker-flags
+      cmd:  mvn ${env.MAVEN_CLI_OPTS} org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=project.version -DforceStdout | grep -Ev "(^\[|Download.*$)" | awk '{sub("-SNAPSHOT","")} 1' > version_output.txt
+    - task: write-to-variable
+      cmd:
+        - cat version_output.txt;
+         new_project_version=$(cat version_output.txt);
+         rm version_output.txt;
+         gerrit_version=$new_project_version-$(git rev-parse HEAD | cut -c1-7);
+         echo "Writing gerrit version \"$new_project_version\" into .project_version";
+         echo -n "$new_project_version" > .project_version;
+
+  bob_release_version:
+    - task: write gerrit version to file
+      docker-image: javamvn
+      docker-flags: *mvn-docker-flags
+      cmd:  mvn ${env.MAVEN_CLI_OPTS} org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=project.version | grep -Ev "^(\[|Download|Progress).*$" | tr -d "[:space:]" | awk '{sub("-SNAPSHOT","")} 1' > version_output.txt;
+    - task: write-to-variable
+      cmd:
+        - cat version_output.txt;
+         new_project_version=$(cat version_output.txt);
+         rm version_output.txt;
+         echo "Writing gerrit version \"$new_project_version\" into .project_version";
+         echo -n "$new_project_version" > .project_version;
+
+  update_pom_version:
+    - task: write version to pom.xml file
+      docker-image: javamvn
+      docker-flags: *mvn-docker-flags
+      cmd: mvn ${env.MAVEN_CLI_OPTS} versions:set -X -DnewVersion=${var.version} -DgenerateBackupPoms=false  -Dfile.encoding=UTF-8
+
+  init-gerrit:
+    - task: set helm & docker repo
+      cmd: echo "snapshots" > .bob/var.repo
+    - task: update image version
+      cmd: echo "${var.version}" > .bob/var.image-version
+    - task: update chart version
+      cmd: echo "${var.version}" > .bob/var.chart-version
+    - task: set namespace
+      cmd: echo "gerrit-$(<.project_name)-${env.BUILD_NUMBER}" > .bob/var.namespace
+    - task: set global helm folder
+      cmd: echo "helm-target" > .bob/var.global-helm-folder
+    - task: set release name
+      cmd: echo "${env.GERRIT_REFSPEC}-${env.BUILD_NUMBER}" > .bob/var.release-name
+
+
+  init-release:
+    - task: set helm & docker repo
+      cmd: echo "releases" > .bob/var.repo
+    - task: update image version
+      cmd: echo "${var.version}-1" > .bob/var.image-version
+    - task: update chart version
+      cmd: echo "${var.version}+1" > .bob/var.chart-version
+    - task: set namespace
+      cmd: echo "release-environment-$(<.project_name)-${env.BUILD_NUMBER}" > .bob/var.namespace
+    - task: set global helm folder
+      cmd: echo "helm-target" > .bob/var.global-helm-folder
+    - task: set release name
+      cmd: echo "${var.project}-releasetest-${env.BUILD_NUMBER}" > .bob/var.release-name
+  init-dependent-chart:
+    - task: "set dependant release name"
+      cmd: echo "${var.project}-${env.BUILD_NUMBER}-dependency" > .bob/var.dependent-release-name
+
+  image:
+    - task: "build image"
+      cmd: docker build ${env.PWD}
+        --tag ${docker-url}/${var.repo}/${var.project}:${var.image-version}
+        --tag ${docker-url}/${var.repo}/${var.project}:latest
+    - task: "push image"
+      cmd: docker push ${docker-url}/${var.repo}/${var.project}:${var.image-version}
+    - task: "push image"
+      cmd: docker push ${docker-url}/${var.repo}/${var.project}:latest
+    - task: set image name
+      cmd: echo "${docker-url}/${var.repo}/${var.project}:${var.image-version}" > .bob/var.image-name
+    - task: find-docker-config-basepath
+      cmd:
+        - dirname ${env.DOCKER_CONFIG} > .bob/var.docker-config-basepath;
+          chmod -R 777 ${env.HOME}/.docker;
+
+  create_csars:
+    - task: create-csar
+      docker-image: local-image
+      docker-flags: &mvn-docker-flags-super
+        - "--volume ${env.PWD}/tmp/:/tmp/csar"
+        - "--volume ${env.PWD}/tests/resources/:${env.PWD}/tests/resources/"
+        - "--volume /var/run/docker.sock:/var/run/docker.sock"
+        - "--volume ${var.docker-config-basepath}/config.json:/.docker/config.json"
+        - "--workdir ${env.PWD}/source"
+        - "--group-add 64000 --group-add 16019 --group-add 20060 --group-add 21905 --group-add 23460 --group-add 10002357 --group-add 507"
+      cmd: generate --helm ../tests/resources/eric-un-notification-service-0.0.1-102.tgz --name acceptance --manifest ../tests/resources/acceptance.mf --certificate ../tests/resources/test.crt --key ../tests/resources/test.key -sm ../tests/resources/scaling_mapping.yaml --log DEBUG --output ../
+    - task: create-csar-helm3
+      docker-image: local-image
+      docker-flags: *mvn-docker-flags-super
+      cmd: generate --helm ../tests/resources/eric-un-notification-service-0.0.1-102.tgz --name acceptance-helm3 --manifest ../tests/resources/acceptance.mf --certificate ../tests/resources/test.crt --key ../tests/resources/test.key --log DEBUG --helm3  --output ../
+    - task: create-multi-chart-csar
+      docker-image: local-image
+      docker-flags: *mvn-docker-flags-super
+      cmd: generate --helm ../tests/resources/eric-un-notification-service-0.0.1-102.tgz ../tests/resources/eric-lcm-container-registry-2.1.0+10.tgz --name acceptance-multi --set registry.users.secret=a --manifest ../tests/resources/acceptance.mf --certificate ../tests/resources/test.crt --key ../tests/resources/test.key --log DEBUG  --output ../
+    - task: create-signed-csar
+      docker-image: local-image
+      docker-flags: *mvn-docker-flags-super
+      cmd: generate --helm ../tests/resources/eric-un-notification-service-0.0.1-102.tgz --name acceptance-type2 --certificate ../tests/resources/user.crt --key ../tests/resources/user.key --no-images  --log DEBUG --pkgOption 2  --output ../
+    - task: create-lightweight-csar
+      docker-image: local-image
+      docker-flags: *mvn-docker-flags-super
+      cmd: generate --helm ../tests/resources/eric-un-notification-service-0.0.1-102.tgz --name lightweight --no-images --log DEBUG  --output ../
+    - task: AcceptanceA_output-csar
+      docker-image: local-image
+      docker-flags: *mvn-docker-flags-super
+      cmd: generate --helm ../tests/resources/eric-un-notification-service-0.0.1-102.tgz --name acceptanceA --no-images --log DEBUG
+    - task: AcceptanceB_output-csar
+      docker-image: local-image
+      docker-flags: *mvn-docker-flags-super
+      cmd: generate --helm ../tests/resources/eric-un-notification-service-0.0.1-102.tgz --name acceptanceB --no-images --log DEBUG  --output ../tmp/
+    - task: AcceptanceC_output-csar
+      docker-image: local-image
+      docker-flags: *mvn-docker-flags-super
+      cmd: generate --helm ../tests/resources/eric-un-notification-service-0.0.1-102.tgz --name acceptanceC --no-images --log DEBUG  --output /tmp/csar/
+    - task: create-doc-csar
+      docker-image: local-image
+      docker-flags: *mvn-docker-flags-super
+      cmd: generate --tosca ../tests/resources/Metadata/Tosca.meta --name acceptanceD --helm3 --no-images --output /tmp/csar
+
+  git_create_branch:
+    - task: create branch
+      cmd:
+        - git branch -D ${var.project}-${var.version}-release || echo "branch does not exist yet";
+          echo "creating branch ${var.project}-${var.version}-release ";
+          git checkout -b ${var.project}-${var.version}-release ;
+
+  git_delete_branch:
+    - task: delete branch
+      cmd:
+        - echo "NAME = ${var.project}";
+          echo "VERSION = ${var.version}";
+          echo "deleting branch ${var.project}-${var.version}-release";
+          git branch -D ${var.project}-${var.version}-release;
+
+
+  update_version_snapshot:
+    - task: update-pom-version-snapshot
+      docker-image: javamvn
+      docker-flags: *mvn-docker-flags
+      cmd: mvn ${env.MAVEN_CLI_OPTS} versions:set -DnextSnapshot=true
+    - task: get-new-proj-version
+      docker-image: javamvn
+      docker-flags: *mvn-docker-flags
+      cmd: mvn ${env.MAVEN_CLI_OPTS} org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=project.version -DforceStdout | grep -Ev "(^\[|Download.*$)" > shapshot_version.txt
+    - task: write-to-variables
+      cmd:
+        - release_version=$(cat shapshot_version.txt);
+          rm version_output.txt;
+          echo "Writing release version \"$release_version\" into .project_version";
+          echo "$release_version" > .project_version;
+
+  docker_remove_local_images:
+    - task: remove local images
+      cmd:
+        - docker rmi $(docker images | grep ${var.project} | awk '$1 ~ /releases/ { print $3 }') || echo 'no images exist to remove';
+          docker rmi $(docker images | grep ${var.project} | awk '$1 ~ /snapshots/ { print $3 }') || echo 'no images exist to remove';

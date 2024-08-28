@@ -1,0 +1,9 @@
+Description of an APP:
+    APPName: App-Onboarding-Hello-World,
+    APPVersion: 1.0.1,
+    APPType: rApp
+APPComponent:
+    NameofComponent: eric-sdk-hello-world,
+    Version: 0.1.0-1,
+    Path: ../tests/resources/OtherDefinitions/ASD/helloworldASD.yaml
+    ArtefactType: Microservice

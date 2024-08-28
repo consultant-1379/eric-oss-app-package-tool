@@ -1,0 +1,15 @@
+apiVersion: v2
+appVersion: 1.0.0
+dependencies:
+- condition: eric-cm-mediator.enabled
+  name: eric-cm-mediator
+  repository: https://arm.sero.gic.ericsson.se/artifactory/proj-adp-gs-all-helm
+  version: 7.6.0+11
+- condition: eric-ctrl-bro.enabled
+  name: eric-ctrl-bro
+  repository: https://arm.sero.gic.ericsson.se/artifactory/proj-adp-gs-all-helm/
+  version: 4.7.0+23
+description: A Helm chart for Cloud Native Base common services
+name: eric-cloud-native-base
+type: application
+version: 1.50.0
